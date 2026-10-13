@@ -3,7 +3,10 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import pandas as pd
 from flask import Flask, jsonify, request, send_from_directory
-
+from dotenv import load_dotenv
+import os
+#-------------------
+load_dotenv()
 # ----------------------------------------------------------------------------- Configuración
 MODELO          = "gemini-3.5-flash-lite"
 PRECIO_INPUT    = 0.30 / 1_000_000    # USD por token de entrada (Gemini 3.5 Flash-Lite)
@@ -17,7 +20,7 @@ BASE            = os.path.dirname(os.path.abspath(__file__))
 DATA            = os.path.join(BASE, "data")
 USO_FILE        = os.path.join(DATA, "uso_diario.json")
 CACHE_FILE      = os.path.join(DATA, "cache_planes.json")
-API_KEY         = os.getenv("GOOGLE_API_KEY", None)
+API_KEY         = os.getenv("API_KEY")
 
 app  = Flask(__name__, static_folder="static")
 lock = threading.Lock()
