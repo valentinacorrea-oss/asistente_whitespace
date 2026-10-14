@@ -1,4 +1,4 @@
-import ast, json, os, threading
+import ast, json, os, re, threading, unicodedata
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import pandas as pd
@@ -41,6 +41,39 @@ cat_pp = pd.read_excel(os.path.join(DATA, "Cerebro_Producto_Propio_Servi.xlsx"))
 cat_pp["nombre"] = cat_pp["Product Name"].str.split("(", regex=False).str[0].str.strip()
 cat_pp = cat_pp.set_index("nombre")
 cat_g = pd.read_excel(os.path.join(DATA, "Investigacion_Productos_Google.xlsx"))
+
+# Catálogo comercial (mismo que usa el correo de Apps Script): gancho, dolores, preguntas, sponsor, objeción...
+def _norm(t):
+    s = unicodedata.normalize("NFD", str(t or ""))
+    return re.sub(r"\s+", " ", "".join(c for c in s if unicodedata.category(c) != "Mn")).lower().strip()
+
+def _txt(v):
+    s = "" if v is None or (isinstance(v, float) and pd.isna(v)) else str(v).strip()
+    return "" if re.fullmatch(r"por validar", s, re.I) else s
+
+def _items(v): return [x for x in (_txt(p) for p in str(_txt(v)).split(";")) if x]
+
+CATALOGO, ALIAS_CAT = {}, {"dot ai": "servipunto", "sitimap": "geomarketing"}
+try:
+    for fila in pd.read_excel(os.path.join(DATA, "Whitespace_PP_por_Ejecutivo.xlsx"), sheet_name="Catalogo_productos").values.tolist():
+        if not _txt(fila[0]): continue
+        CATALOGO[_norm(fila[0])] = {
+            "nombre": _txt(fila[0]), "categoria": _txt(fila[1]), "que_resuelve": _txt(fila[2]), "tamano": _txt(fila[4]),
+            "roi": _items(fila[6]), "dolores": _items(fila[7]), "preguntas": _items(fila[8]), "gancho": _txt(fila[9]),
+            "sponsor": _txt(fila[10]), "influenciadores": _items(fila[11]), "objecion": _txt(fila[12]),
+            "respuesta": _txt(fila[13]), "caso_uso": _txt(fila[14]), "senales": _items(fila[15])}
+except Exception as e:
+    print(f"Catálogo comercial no disponible: {e}")
+
+def buscar_catalogo(nombre):
+    n = re.sub(r"\(.*?\)", "", _norm(nombre)).strip()
+    if not n: return None
+    for a, b in ALIAS_CAT.items():
+        if a in n: n = b
+    if n in CATALOGO: return CATALOGO[n]
+    cands = sorted((k for k in CATALOGO if k in n or n in k), key=len, reverse=True)
+    if not cands: return None
+    return CATALOGO[next((k for k in cands if n.startswith(k) or k.startswith(n)), cands[0])]
 
 def ficha_producto(nombre):
     if not nombre or nombre not in cat_pp.index: return "Sin ficha disponible."
@@ -176,6 +209,12 @@ def cuentas():
             "estado_1", "razon_1", "producto_2", "google_comprados", "pp_ganadas", "es_cliente", "deal_abierto",
             "pts_cliente", "pts_penetracion", "pts_whitespace", "pts_presupuesto", "pts_deal_abierto"]
     return jsonify(json.loads(d[cols].to_json(orient="records", force_ascii=False)))
+
+@app.get("/api/catalogo")
+def catalogo():
+    """Ficha comercial por nombre de producto tal como aparece en producto_1 / producto_2."""
+    nombres = set(emp.producto_1.dropna()) | set(emp.producto_2.dropna())
+    return jsonify({n: f for n in nombres if (f := buscar_catalogo(n))})
 
 @app.get("/api/uso")
 def uso(): return jsonify({"usd": round(gasto_hoy(), 3), "tope": TOPE_DIARIO_USD})
