@@ -218,7 +218,8 @@ section{overflow-y:auto;min-height:0;padding:0 6px 24px}
     <span class="brand-tag">Whitespace</span>
   </div>
   <div class="header-actions">
-    <button class="btn" id="descargarReporte" type="button">Descargar reporte</button>
+    <button class="btn" id="btnReporte" type="button">Generar Reporte</button>
+    <button class="btn sec" id="btnPreview" type="button" style="display:none;">Preview Correo</button>
     <div class="uso" id="usoBox"><span>Uso</span><div class="barra"><i id="usoBar"></i></div><strong id="usoTxt">—</strong></div>
     <span class="err" id="errorReporte" role="status" aria-live="polite"></span>
   </div>
@@ -317,7 +318,14 @@ $("#ejec").onchange = async () => {
   $("#kpis").hidden = false;
   pintarLista();
   if (actual) abrir(actual.emp);
-  else $("#detalle").innerHTML = `<div class="vacio"><h2>Sin cuentas</h2><p>Este ejecutivo no tiene cuentas asignadas</p></div>`;
+  else $("#detalle").innerHTML = `<div class="vacio"><h2>Sin cuentas</h2><p>Este ejecutivo no tiene cuentas asignados</p></div>`;
+  // Mostrar/ocultar botón Preview según si hay ejecutivo seleccionado
+  const btnPreview = $("#btnPreview");
+  if ($("#ejec").value && actual) {
+    btnPreview.style.display = "block";
+  } else {
+    btnPreview.style.display = "none";
+  }
   uso();
 };
 
@@ -483,22 +491,44 @@ async function preguntar() {
 
 pintarEjecutivos();
 
-$("#descargarReporte").onclick = async () => {
-  const button = $("#descargarReporte");
+async function generarReporte() {
+  const btn = $("#btnReporte");
   const error = $("#errorReporte");
-  button.disabled = true;
-  button.textContent = "Generando…";
+  btn.disabled = true;
+  btn.textContent = "⏳ Generando…";
   error.textContent = "";
   try {
     const reporte = await api("/api/generar-reporte", {});
     window.location.href = `/reportes/${encodeURIComponent(reporte.archivo)}`;
+    btn.textContent = "📊 Generar Reporte";
   } catch (e) {
     error.textContent = e.message;
-  } finally {
-    button.disabled = false;
-    button.textContent = "Descargar reporte";
+    btn.textContent = "📊 Generar Reporte";
   }
-};
+  btn.disabled = false;
+}
+
+async function previewCorreo() {
+  const btnPreview = $("#btnPreview");
+  const error = $("#errorReporte");
+  btnPreview.disabled = true;
+  btnPreview.textContent = "⏳ Cargando…";
+  error.textContent = "";
+  try {
+    const ejecutivo = $("#ejec").value;
+    const res = await fetch(`/api/correo-preview/${encodeURIComponent(ejecutivo)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Error al cargar correo");
+    const ventana = window.open("", "preview-correo", "width=1000,height=800,scrollbars=yes");
+    ventana.document.write(data.html);
+    ventana.document.close();
+    btnPreview.textContent = "Preview Correo";
+  } catch (e) {
+    error.textContent = e.message;
+    btnPreview.textContent = "Preview Correo";
+  }
+  btnPreview.disabled = false;
+}
 
 document.addEventListener("keydown", e => {
   if (e.key === "Enter" && e.target.id === "q") {
@@ -508,6 +538,8 @@ document.addEventListener("keydown", e => {
 });
 
 document.addEventListener("click", e => {
+  if (e.target.id === "btnReporte") generarReporte();
+  if (e.target.id === "btnPreview") previewCorreo();
   if (e.target.id === "env") preguntar();
 });
 </script>
