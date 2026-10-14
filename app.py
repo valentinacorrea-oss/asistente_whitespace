@@ -92,10 +92,11 @@ def _guardar(path, obj):
 
 def gasto_hoy():
     return _leer(USO_FILE, {}).get(_hoy(), {}).get("usd", 0.0)
+
 def llamar_claude(mensajes, max_tokens):
     """Reserva el peor caso antes de llamar; si excede el tope, no llama."""
     if not API_KEY:
-        raise RuntimeError("Falta configurar GOOGLE_API_KEY en el servidor.")
+        raise RuntimeError("Falta configurar API_KEY en el servidor.")
     tokens_in_est = sum(len(m["content"]) for m in mensajes) // 3 + len(SYSTEM) // 3
     peor_caso = tokens_in_est * PRECIO_INPUT + max_tokens * PRECIO_OUTPUT
     with lock:
@@ -104,18 +105,15 @@ def llamar_claude(mensajes, max_tokens):
         if dia["usd"] + peor_caso > TOPE_DIARIO_USD:
             raise PermissionError("Se alcanzó el límite de consumo de hoy. El asistente vuelve a estar disponible mañana.")
         dia["usd"] += peor_caso; _guardar(USO_FILE, uso)
-    
     try:
         import requests
-        
         # URL para Google Cloud Generative AI (usa la clave como API key en header)
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODELO}:generateContent"
-        
         headers = {
             "Content-Type": "application/json",
             "x-goog-api-key": API_KEY
         }
-        
+
         # Convertir mensajes a formato Gemini
         contents = []
         for m in mensajes:
@@ -123,17 +121,17 @@ def llamar_claude(mensajes, max_tokens):
                 "role": "user" if m["role"] == "user" else "model",
                 "parts": [{"text": m["content"]}]
             })
-        
+
         payload = {
             "contents": contents,
             "systemInstruction": {"parts": [{"text": SYSTEM}]},
             "generationConfig": {"maxOutputTokens": max_tokens}
         }
-        
+
         r = requests.post(url, json=payload, headers=headers, timeout=60)
         r.raise_for_status()
         data = r.json()
-        
+
         # Extraer texto
         texto = ""
         if "candidates" in data and len(data["candidates"]) > 0:
@@ -142,24 +140,25 @@ def llamar_claude(mensajes, max_tokens):
                 for part in candidate["content"]["parts"]:
                     if "text" in part:
                         texto += part["text"]
-        
+
         # Extraer tokens
         usage = data.get("usageMetadata", {})
         input_tokens = usage.get("promptTokenCount", tokens_in_est)
         output_tokens = usage.get("candidatesTokenCount", len(texto) // 3)
         real = input_tokens * PRECIO_INPUT + output_tokens * PRECIO_OUTPUT
-        
+
     except Exception as e:
         print(f"Error: {e}")
         texto, real = "", 0.0
-    
+
     with lock:
         uso = _leer(USO_FILE, {}); dia = uso[_hoy()]
         dia["usd"] = round(dia["usd"] - peor_caso + real, 6); dia["llamadas"] += 1 if texto else 0
         _guardar(USO_FILE, uso)
-    
+
     if not texto: raise RuntimeError("No fue posible contactar el modelo. Intenta de nuevo.")
     return texto
+
 # ----------------------------------------------------------------------------- API
 @app.get("/")
 def index(): return send_from_directory("static", "index.html")
@@ -180,6 +179,36 @@ def cuentas():
 
 @app.get("/api/uso")
 def uso(): return jsonify({"usd": round(gasto_hoy(), 3), "tope": TOPE_DIARIO_USD})
+
+@app.post("/api/generar-reporte")
+def generar_reporte():
+    """Genera Excel con hojas por ejecutivo"""
+    try:
+        from reports import ReportGenerador
+        gen = ReportGenerador(os.path.join(DATA, "scores_empresa_producto.csv"))
+        reportes_dir = os.path.join(BASE, "reportes")
+        os.makedirs(reportes_dir, exist_ok=True)
+        path = gen.generar_excel(os.path.join(reportes_dir, "whitespace_por_ejecutivo.xlsx"))
+        return jsonify({"status": "Reporte generado", "archivo": os.path.basename(path)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.get("/api/correo-preview/<ejecutivo>")
+def correo_preview(ejecutivo):
+    """Retorna HTML del correo para previsualizar"""
+    try:
+        from reports import ReportGenerador
+        gen = ReportGenerador(os.path.join(DATA, "scores_empresa_producto.csv"))
+        html = gen.generar_correo_html(ejecutivo)
+        return jsonify({"html": html})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.get("/reportes/<filename>")
+def descargar_reporte(filename):
+    """Descarga el archivo Excel"""
+    reportes_dir = os.path.join(BASE, "reportes")
+    return send_from_directory(reportes_dir, filename, as_attachment=True, download_name=filename)
 
 def _fila(emp_id):
     d = emp[emp.emp == int(emp_id)]

@@ -158,6 +158,9 @@ section{overflow-y:auto;min-height:0;padding:0 6px 24px}
 .btn:disabled{opacity:.6;cursor:not-allowed;box-shadow:none}
 .btn.sec{background:transparent;color:var(--primary-lt);box-shadow:none;border:1px solid var(--line)}
 .btn.sec:hover{background:rgba(73,25,107,.3)}
+.header-actions{display:flex;align-items:center;gap:12px}
+.header-actions .btn{padding:9px 16px;font-size:12px;white-space:nowrap}
+.header-actions .err{margin:0}
 
 /* PLAN */
 .plan-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;grid-auto-flow:dense}
@@ -198,7 +201,8 @@ section{overflow-y:auto;min-height:0;padding:0 6px 24px}
 }
 @media(max-width:540px){
   header{height:64px}.brand img{height:30px}.brand-tag{display:none}
-  .uso{min-width:auto;padding:7px 10px}.uso .barra{width:70px}
+  .header-actions{gap:6px}.header-actions .btn{padding:8px 10px;font-size:11px}
+  .uso{min-width:auto;gap:6px;padding:7px 8px}.uso span{display:none}.uso .barra{width:40px}
   .card{padding:16px}.msg.u{margin-left:0}.fila{flex-direction:column}
 }
 ::-webkit-scrollbar{width:8px;height:8px}
@@ -213,7 +217,11 @@ section{overflow-y:auto;min-height:0;padding:0 6px 24px}
     <img src="/static/logo.png" alt="Servinformación">
     <span class="brand-tag">Whitespace</span>
   </div>
-  <div class="uso" id="usoBox"><span>Uso</span><div class="barra"><i id="usoBar"></i></div><strong id="usoTxt">—</strong></div>
+  <div class="header-actions">
+    <button class="btn" id="descargarReporte" type="button">Descargar reporte</button>
+    <div class="uso" id="usoBox"><span>Uso</span><div class="barra"><i id="usoBar"></i></div><strong id="usoTxt">—</strong></div>
+    <span class="err" id="errorReporte" role="status" aria-live="polite"></span>
+  </div>
 </header>
 <main>
 <aside>
@@ -474,6 +482,23 @@ async function preguntar() {
 }
 
 pintarEjecutivos();
+
+$("#descargarReporte").onclick = async () => {
+  const button = $("#descargarReporte");
+  const error = $("#errorReporte");
+  button.disabled = true;
+  button.textContent = "Generando…";
+  error.textContent = "";
+  try {
+    const reporte = await api("/api/generar-reporte", {});
+    window.location.href = `/reportes/${encodeURIComponent(reporte.archivo)}`;
+  } catch (e) {
+    error.textContent = e.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Descargar reporte";
+  }
+};
 
 document.addEventListener("keydown", e => {
   if (e.key === "Enter" && e.target.id === "q") {
