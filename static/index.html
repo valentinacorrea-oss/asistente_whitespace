@@ -228,7 +228,6 @@ details.mas summary::before{content:"▸ "} details.mas[open] summary::before{co
     <div class="tools">
       <input type="text" id="q" placeholder="Buscar empresa, industria o producto…" aria-label="Buscar">
       <div id="filtros"></div>
-      <button class="btn sec sm" id="btnCsv" type="button" title="Descarga la vista actual para abrirla en Excel">Descargar Excel</button>
     </div>
   </div>
 
@@ -510,7 +509,6 @@ async function cargarEjecutivo(nombre) {
 
 $("#ejec").onchange = e => { cargarEjecutivo(e.target.value); uso(); };
 $("#q").oninput = e => { S.q = e.target.value; S.vista === "productos" ? pintarProductos() : pintarCuentas(); };
-$("#btnCsv").onclick = descargar;
 
 document.addEventListener("click", e => {
   const t = e.target.closest("[data-v],[data-f],[data-s],tr[data-id],button[data-id],#volver");
